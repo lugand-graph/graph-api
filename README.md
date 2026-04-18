@@ -1,63 +1,108 @@
 # graph-api
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+Backend REST da plataforma Graph — Quarkus 3 / Java 21.
 
-If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
+Expõe os dados do Neo4j como API REST e aplica o schema do PostgreSQL via Flyway.
 
-## Running the application in dev mode
+## Stack
 
-You can run your application in dev mode that enables live coding using:
+| | |
+|---|---|
+| Framework | Quarkus 3.34.5 |
+| Java | 21 |
+| Banco de grafo | Neo4j 5.26 (driver `quarkus-neo4j`) |
+| Banco relacional | PostgreSQL 16 (`quarkus-jdbc-postgresql`) |
+| Migrations | Flyway (`quarkus-flyway`) |
 
-```shell script
+## Pré-requisitos
+
+- Java 21
+- Neo4j e PostgreSQL rodando (via `graph-workspace/docker-compose.yml`)
+- Variáveis de ambiente definidas (ver abaixo)
+
+## Variáveis de Ambiente
+
+Carregadas automaticamente de `src/main/resources/application.yml`.  
+Em dev mode, o Quarkus lê o arquivo `.env` na raiz de `graph-workspace`.
+
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `NEO4J_URI` | `bolt://localhost:7687` | URI do Neo4j |
+| `NEO4J_USERNAME` | `neo4j` | Usuário Neo4j |
+| `NEO4J_PASSWORD` | `lugand00` | Senha Neo4j |
+| `PG_HOST` | `localhost` | Host PostgreSQL |
+| `PG_PORT` | `5433` | Porta PostgreSQL |
+| `PG_DB` | `graph_meta` | Nome do banco |
+| `PG_USER` | `graph_user` | Usuário PostgreSQL |
+| `PG_PASSWORD` | `lugand00` | Senha PostgreSQL |
+
+## Rodar em modo dev
+
+```bash
 ./mvnw quarkus:dev
 ```
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
+- API REST: http://localhost:8080/api/graph
+- Dev UI: http://localhost:8080/q/dev/
+- GraphQL UI: http://localhost:8080/q/graphql-ui
 
-## Packaging and running the application
+O Flyway aplica as migrations automaticamente ao iniciar.
 
-The application can be packaged using:
+## Endpoints
 
-```shell script
-./mvnw package
+| Método | Path | Descrição |
+|---|---|---|
+| `GET` | `/api/graph` | Todos os nós e arestas |
+| `GET` | `/api/graph/nodes` | Apenas nós |
+| `GET` | `/api/graph/edges` | Apenas arestas |
+| `POST` | `/api/graph/nodes` | Criar nó |
+| `POST` | `/api/graph/edges` | Criar aresta |
+
+### Exemplo
+
+```bash
+curl http://localhost:8080/api/graph
+# { "nodes": [...], "edges": [...] }
+
+curl -X POST http://localhost:8080/api/graph/nodes \
+  -H "Content-Type: application/json" \
+  -d '{"id":"abc-123","label":"Concept","name":"Grafo de Conhecimento"}'
 ```
 
-It produces the `quarkus-run.jar` file in the `target/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/quarkus-app/lib/` directory.
+## Estrutura
 
-The application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
+```
+src/main/java/com/graph/
+├── model/
+│   ├── GraphData.java      ← { nodes, edges }
+│   ├── GraphNode.java      ← { id, label, name, description, ... }
+│   └── GraphEdge.java      ← { id, sourceId, targetId, type }
+├── repository/
+│   └── GraphRepository.java ← queries Cypher via Neo4j driver
+└── resource/
+    ├── GraphResource.java  ← endpoints JAX-RS
+    └── CorsFilter.java     ← CORS para localhost:5173
 
-If you want to build an _über-jar_, execute the following command:
-
-```shell script
-./mvnw package -Dquarkus.package.jar.type=uber-jar
+src/main/resources/
+├── application.yml         ← configuração Quarkus
+└── db/migration/
+    └── V1__schema_base.sql ← schema PostgreSQL (Flyway)
 ```
 
-The application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
+## Build
 
-## Creating a native executable
+```bash
+# Compilar
+./mvnw compile -q
 
-You can create a native executable using:
+# Build completo (gera JAR)
+./mvnw package -DskipTests
 
-```shell script
-./mvnw package -Dnative
+# Rodar o JAR gerado
+java -jar target/quarkus-app/quarkus-run.jar
 ```
 
-Or, if you don't have GraalVM installed, you can run the native executable build in a container using:
+## ADRs Relacionadas
 
-```shell script
-./mvnw package -Dnative -Dquarkus.native.container-build=true
-```
-
-You can then execute your native executable with: `./target/graph-api-1.0.0-SNAPSHOT-runner`
-
-If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
-
-## Related Guides
-
-- YAML Configuration ([guide](https://quarkus.io/guides/config-yaml)): Use YAML to configure your Quarkus application
-- SmallRye GraphQL ([guide](https://quarkus.io/guides/smallrye-graphql)): Create GraphQL Endpoints using the code-first approach from MicroProfile GraphQL
-- WebSockets Next ([guide](https://quarkus.io/guides/websockets-next-reference)): Implementation of the WebSocket API with enhanced efficiency and usability
-- REST ([guide](https://quarkus.io/guides/rest)): A Jakarta REST implementation utilizing build time processing and Vert.x. This extension is not compatible with the quarkus-resteasy extension, or any of the extensions that depend on it.
-- REST Jackson ([guide](https://quarkus.io/guides/rest#json-serialisation)): Jackson serialization support for Quarkus REST. This extension is not compatible with the quarkus-resteasy extension, or any of the extensions that depend on it
-- Neo4j client ([guide](https://quarkiverse.github.io/quarkiverse-docs/quarkus-neo4j/dev/index.html)): Connect to Neo4j graph datastore
+- [ADR-003 — Quarkus como backend](../graph-docs/adr/ADR-003-quarkus-backend.md)
+- [ADR-002 — Neo4j como banco principal](../graph-docs/adr/ADR-002-neo4j-graph-database.md)
